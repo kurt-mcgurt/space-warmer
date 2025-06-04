@@ -34,7 +34,7 @@ jobs:
             # -w: write out the HTTP code
             # -L: follow redirects
             # --max-time: timeout in seconds
-            local response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \ -L --max-time $max_time "$url" 2>/dev/null || echo "000")
+            local response=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time $max_time "$url" 2>/dev/null || echo "000")
             echo "Response code: $response"
             echo "$response"
           }
