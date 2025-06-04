@@ -1,48 +1,43 @@
-name: Keep HF Space Warm
+name: Keep Hugging Face Space Warm
 
 on:
-  # Allow manual trigger
-  workflow_dispatch:
-  
-  # Schedule to run every 30 minutes
+  workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/30 * * * *'  # Every 30 minutes
 
 jobs:
   keep-warm:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     
     steps:
       - name: Keep Hugging Face Space Active
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}  # Access the token from GitHub secrets
         run: |
           # Your Hugging Face Space URLs
           DIRECT_URL="https://camnewsroom-kc-testing-playground.hf.space/"
-          DEV_URL="https://huggingface.co/spaces/camnewsroom/kc-testing-playground/"
+          DEV_URL="https://huggingface.co/spaces/camnewsroom/kC-testing-playground/"
           
           echo "🤖 Starting HF Space keep-warm process..."
           echo "Timestamp: $(date)"
           
-          # Function to check URL with proper error handling
+          # Function to check URL with authentication
           check_url() {
             local url=$1
             local max_time=${2:-30}
-            echo "Checking: $url"
-            
-            # Use curl with all the flags explained:
-            # -s: silent mode
-            # -o /dev/null: discard output
-            # -w: write out the HTTP code
-            # -L: follow redirects
-            # --max-time: timeout in seconds
-            local response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" -L --max-time $max_time "$url" 2>/dev/null || echo "000")
-            echo "Response code: $response"
-            echo "$response"
+            # Include the Authorization header with HF_TOKEN
+            curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $HF_TOKEN" \
+              -L --max-time $max_time "$url" 2>/dev/null || echo "000"
           }
           
           # Step 1: Check if Space is already active
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Step 1: Checking Space status..."
+          echo "URL: $DIRECT_URL"
           INITIAL_STATUS=$(check_url "$DIRECT_URL")
+          echo "Status code: $INITIAL_STATUS"
           
           if [ "$INITIAL_STATUS" = "200" ]; then
             echo "✅ Space is already active! No wake-up needed."
@@ -54,10 +49,12 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "💤 Space appears to be sleeping (status: $INITIAL_STATUS)"
             echo "Step 2: Attempting to wake up via developer URL..."
+            echo "URL: $DEV_URL"
             
             DEV_STATUS=$(check_url "$DEV_URL" 60)
+            echo "Developer URL status: $DEV_STATUS"
             
-            # Step 3: Wait for Space to fully boot
+            # Step 3: Wait for Space to boot
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "Step 3: Waiting for Space to boot up..."
             echo "This typically takes 2-3 minutes for cold starts..."
@@ -79,17 +76,17 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "Step 4: Final verification..."
             FINAL_STATUS=$(check_url "$DIRECT_URL" 60)
+            echo "Final status code: $FINAL_STATUS"
             
             if [ "$FINAL_STATUS" = "200" ]; then
               echo "✅ Success! Space is now active."
             else
               echo "⚠️ Warning: Space may still be starting up."
-              echo "Final status code: $FINAL_STATUS"
               echo "The Space might need more time, but it should be waking up."
             fi
           else
             echo "⚠️ Unexpected status code: $INITIAL_STATUS"
-            echo "The Space might be in an unusual state."
+            echo "The Space returned an unusual status."
           fi
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
