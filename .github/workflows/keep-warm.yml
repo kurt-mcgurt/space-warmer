@@ -1,0 +1,96 @@
+name: Keep HF Space Warm
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+  
+  # Schedule to run every 30 minutes
+  schedule:
+    - cron: '*/30 * * * *'
+
+jobs:
+  keep-warm:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Keep Hugging Face Space Active
+        run: |
+          # Your Hugging Face Space URLs
+          DIRECT_URL="https://camnewsroom-kc-testing-playground.hf.space/"
+          DEV_URL="https://huggingface.co/spaces/camnewsroom/kc-testing-playground/"
+          
+          echo "🤖 Starting HF Space keep-warm process..."
+          echo "Timestamp: $(date)"
+          
+          # Function to check URL with proper error handling
+          check_url() {
+            local url=$1
+            local max_time=${2:-30}
+            echo "Checking: $url"
+            
+            # Use curl with all the flags explained:
+            # -s: silent mode
+            # -o /dev/null: discard output
+            # -w: write out the HTTP code
+            # -L: follow redirects
+            # --max-time: timeout in seconds
+            local response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \ -L --max-time $max_time "$url" 2>/dev/null || echo "000")
+            echo "Response code: $response"
+            echo "$response"
+          }
+          
+          # Step 1: Check if Space is already active
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Step 1: Checking Space status..."
+          INITIAL_STATUS=$(check_url "$DIRECT_URL")
+          
+          if [ "$INITIAL_STATUS" = "200" ]; then
+            echo "✅ Space is already active! No wake-up needed."
+            exit 0
+          fi
+          
+          # Step 2: If we get 404, Space needs to be awakened
+          if [ "$INITIAL_STATUS" = "404" ] || [ "$INITIAL_STATUS" = "000" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "💤 Space appears to be sleeping (status: $INITIAL_STATUS)"
+            echo "Step 2: Attempting to wake up via developer URL..."
+            
+            DEV_STATUS=$(check_url "$DEV_URL" 60)
+            
+            # Step 3: Wait for Space to fully boot
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Step 3: Waiting for Space to boot up..."
+            echo "This typically takes 2-3 minutes for cold starts..."
+            
+            # Progressive waiting with status checks
+            for i in 1 2 3 4; do
+              echo "Waiting... ($((i*45))/180 seconds)"
+              sleep 45
+              
+              # Quick check if it's up
+              QUICK_CHECK=$(check_url "$DIRECT_URL" 10)
+              if [ "$QUICK_CHECK" = "200" ]; then
+                echo "🎉 Space is now active!"
+                exit 0
+              fi
+            done
+            
+            # Final check
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Step 4: Final verification..."
+            FINAL_STATUS=$(check_url "$DIRECT_URL" 60)
+            
+            if [ "$FINAL_STATUS" = "200" ]; then
+              echo "✅ Success! Space is now active."
+            else
+              echo "⚠️ Warning: Space may still be starting up."
+              echo "Final status code: $FINAL_STATUS"
+              echo "The Space might need more time, but it should be waking up."
+            fi
+          else
+            echo "⚠️ Unexpected status code: $INITIAL_STATUS"
+            echo "The Space might be in an unusual state."
+          fi
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✨ Keep-warm process completed at $(date)"
